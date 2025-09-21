@@ -1,6 +1,8 @@
 services:
   # Vector Search API
   vector-api:
+    env_file:
+      - .env
     build:
       context: .
       dockerfile: Dockerfile
@@ -9,9 +11,13 @@ services:
     ports:
       - "5200:5200"
     environment:
-      - QDRANT_HOST=qdrant
-      - QDRANT_PORT=6333
-      - QDRANT_GRPC_PORT=6334
+      - QDRANT_URL=http://qdrant:6333
+      - DEFAULT_COLLECTION=docs_2025
+      - ALLOW_MODELS=st:./models/bge-m3,st:./models/mE5-small,st:./models/mE5-base,st:./models/mE5-large,st:./models/paraphrase-ml,st:./models/ko-sbert,st:./models/ko-sroberta,st:./models/ko-simcse
+      - API_KEY=
+      - CORS_ALLOW_ORIGINS=*
+      - DEVICE=auto
+      - TORCH_NUM_THREADS=4
       - API_HOST=0.0.0.0
       - API_PORT=5200
       - HF_HOME=/app/.cache/huggingface
