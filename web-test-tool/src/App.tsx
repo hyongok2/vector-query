@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react'
-import { api, ApiError, setApiBaseUrl, getApiBaseUrl } from './api'
+import { api, ApiError, setApiBaseUrl } from './api'
 import './App.css'
 
 // Local type definitions
@@ -705,7 +705,7 @@ function App() {
                               <div className="hit-text">
                                 <button
                                   className="text-copy-button"
-                                  onClick={() => copyToClipboard(hit.payload.text as string, `${hit.id}-${index}`)}
+                                  onClick={() => copyToClipboard(hit.payload?.text as string, `${hit.id}-${index}`)}
                                   title="텍스트 복사"
                                 >
                                   {copiedTexts.has(`${hit.id}-${index}`) ? (

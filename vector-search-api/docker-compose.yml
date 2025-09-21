@@ -26,12 +26,7 @@ services:
       # Persist Hugging Face cache
       - model_cache:/app/.cache/huggingface
       - ./logs:/app/logs
-    depends_on:
-      qdrant:
-        condition: service_healthy
     restart: unless-stopped
-    networks:
-      - vector-network
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:5200/health"]
       interval: 30s

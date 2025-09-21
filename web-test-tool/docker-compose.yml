@@ -1,0 +1,46 @@
+services:
+  vector-search-tester:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: vector-search-tester:v1.0.0
+    container_name: vector-search-tester
+    ports:
+      - "5250:80"
+    environment:
+      - NODE_ENV=production
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.vector-tester.rule=Host(`vector-tester.localhost`)"
+      - "traefik.http.services.vector-tester.loadbalancer.server.port=80"
+    networks:
+      - vector-network
+
+  # Optional: Include nginx-proxy for reverse proxy setup
+  # nginx-proxy:
+  #   image: nginxproxy/nginx-proxy:latest
+  #   container_name: nginx-proxy
+  #   ports:
+  #     - "80:80"
+  #     - "443:443"
+  #   volumes:
+  #     - /var/run/docker.sock:/tmp/docker.sock:ro
+  #     - ./certs:/etc/nginx/certs:ro
+  #     - ./vhost:/etc/nginx/vhost.d
+  #     - ./html:/usr/share/nginx/html
+  #   environment:
+  #     - DEFAULT_HOST=vector-tester.localhost
+  #   networks:
+  #     - vector-network
+
+networks:
+  vector-network:
+    driver: bridge
+    name: vector-network
