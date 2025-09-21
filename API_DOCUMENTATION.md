@@ -263,7 +263,5 @@ X-API-Key: your-api-key-here  # 선택사항
 | `ko-sbert` | st | 한국어 특화 | 한국어 | 768 |
 | `ko-sroberta` | st | 한국어 RoBERTa | 한국어 | 768 |
 | `ko-simcse` | st | 한국어 SimCSE | 한국어 | 768 |
-| `ko-sentence` | st | 한국어 문장 | 한국어 | 768 |
 | `paraphrase-ml` | st | 의역 다국어 | 다국어 | 768 |
-| `nomic-embed` | st | Nomic 임베딩 | 영어 | 768 |
 
