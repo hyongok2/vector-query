@@ -59,7 +59,7 @@ models_to_download = [
     # ... 기존 모델들 ...
     {
         "name": "your-organization/your-model-name",
-        "backend": "st",  # 또는 "fastembed"
+        "backend": "st", 
         "save_path": "./models/your-model"
     }
 ]
@@ -87,7 +87,7 @@ ALLOW_MODELS=...,st:./models/your-model
 PRESETS = {
     # ... 기존 모델들 ...
     "your-model": {
-        "backend": "st",          # "st" 또는 "fastembed"
+        "backend": "st",          
         "name": "./models/your-model",
         "normalize": True,         # 정규화 여부
         "e5_mode": "auto"         # "auto", "query", 또는 "passage"
@@ -99,7 +99,6 @@ PRESETS = {
 
 - **backend**:
   - `"st"`: Sentence Transformers 백엔드 (대부분의 Hugging Face 모델)
-  - `"fastembed"`: FastEmbed 백엔드 (ONNX 최적화 모델)
 
 - **normalize**:
   - `True`: 벡터 정규화 (코사인 유사도 사용 시)
@@ -177,7 +176,6 @@ curl -X POST http://localhost:5200/embed \
 - 더 작은 모델 사용 고려
 
 ### 성능 최적화
-- FastEmbed 백엔드 사용 (ONNX 최적화)
 - GPU 사용 (`DEVICE=cuda`)
 - 배치 처리 활용 (`/bulk_embed`)
 

@@ -1,0 +1,23 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100">
+  <defs>
+    <linearGradient id="searchGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#2563eb;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#1d4ed8;stop-opacity:1" />
+    </linearGradient>
+  </defs>
+
+  <!-- Background circle -->
+  <circle cx="50" cy="50" r="45" fill="url(#searchGradient)" stroke="#1e40af" stroke-width="2"/>
+
+  <!-- Search glass -->
+  <circle cx="40" cy="40" r="15" fill="none" stroke="white" stroke-width="4"/>
+
+  <!-- Search handle -->
+  <line x1="51" y1="51" x2="68" y2="68" stroke="white" stroke-width="4" stroke-linecap="round"/>
+
+  <!-- Vector dots -->
+  <circle cx="35" cy="35" r="2" fill="white" opacity="0.8"/>
+  <circle cx="40" cy="30" r="1.5" fill="white" opacity="0.6"/>
+  <circle cx="45" cy="38" r="1.5" fill="white" opacity="0.6"/>
+  <circle cx="38" cy="45" r="1" fill="white" opacity="0.4"/>
+</svg>

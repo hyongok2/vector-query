@@ -30,7 +30,7 @@ def _resolve_name(name: str) -> str:
     """상대경로/환경변수/홈(~)를 안전하게 확장."""
     if not name:
         return name
-    # fastembed/ST 모두 로컬 디렉터리 경로를 허용하므로 확장만 해준다
+    # 로컬 디렉터리 경로를 허용하므로 확장만 해준다
     name = os.path.expandvars(name)
     name = os.path.expanduser(name)
     return name
