@@ -1,0 +1,43 @@
+services:
+  # Vector Search API
+  vector-api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: vector-search-api:v1.0.0
+    container_name: vector-search-api
+    ports:
+      - "5200:5200"
+    environment:
+      - QDRANT_HOST=qdrant
+      - QDRANT_PORT=6333
+      - QDRANT_GRPC_PORT=6334
+      - API_HOST=0.0.0.0
+      - API_PORT=5200
+      - HF_HOME=/app/.cache/huggingface
+      - TRANSFORMERS_CACHE=/app/.cache/huggingface
+      - SENTENCE_TRANSFORMERS_HOME=/app/.cache/huggingface
+      # Offline mode for closed network
+      - HF_HUB_OFFLINE=1
+      - TRANSFORMERS_OFFLINE=1
+    volumes:
+      # Mount local models directory to container (read-only)
+      - ./models:/app/models:ro
+      # Persist Hugging Face cache
+      - model_cache:/app/.cache/huggingface
+      - ./logs:/app/logs
+    depends_on:
+      qdrant:
+        condition: service_healthy
+    restart: unless-stopped
+    networks:
+      - vector-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:5200/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+
+volumes:
+  model_cache:
+    driver: local
