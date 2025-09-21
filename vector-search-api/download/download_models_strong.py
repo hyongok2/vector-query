@@ -22,17 +22,12 @@ MODELS = {
 
     "bge-m3":            ("BAAI/bge-m3", False),
     "mE5-small":         ("intfloat/multilingual-e5-small", False),
-
-    #ST 계열
     "mE5-base":          ("intfloat/multilingual-e5-base", False),
     "mE5-large":         ("intfloat/multilingual-e5-large", False),
     "paraphrase-ml":     ("sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2", False),
     "ko-sbert":          ("snunlp/KR-SBERT-V40K-klueNLI-augSTS", False),
     "ko-sroberta":       ("jhgan/ko-sroberta-multitask", False),
-
     "ko-simcse":         ("BM-K/KoSimCSE-roberta-multitask", False),
-    "ko-sentence":       ("snunlp/KR-SBERT-V40K-klueNLI-augSTS", False),  # 이미 위에 있지만, 프리셋 분리용으로 둬도 됨
-    "nomic-embed":       ("nomic-ai/nomic-embed-text-v1", True),
 }
 
 OUT_DIR = Path("../models")

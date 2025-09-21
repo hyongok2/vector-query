@@ -6,7 +6,5 @@ PRESETS = {
     "paraphrase-ml":  {"backend": "st", "name": "./models/paraphrase-ml", "normalize": True, "e5_mode": "auto"},
     "ko-sbert":       {"backend": "st", "name": "./models/ko-sbert", "normalize": True, "e5_mode": "auto"},
     "ko-sroberta":    {"backend": "st", "name": "./models/ko-sroberta", "normalize": True, "e5_mode": "auto"},
-    "ko-simcse":      {"backend": "st", "name": "./models/ko-simcse", "normalize": True, "e5_mode": "auto"},
-    "ko-sentence":    {"backend": "st", "name": "./models/ko-sentence", "normalize": True, "e5_mode": "auto"},
-    "nomic-embed":    {"backend": "st", "name": "./models/nomic-embed", "normalize": True, "e5_mode": "auto"},
+    "ko-simcse":      {"backend": "st", "name": "./models/ko-simcse", "normalize": True, "e5_mode": "auto"}
 }
