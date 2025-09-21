@@ -10,10 +10,11 @@ RUN apt-get update && apt-get install -y \
     g++ \
     && rm -rf /var/lib/apt/lists/*
 
-# Copy requirements
-COPY requirements.txt .
+# Copy requirements (Linux-compatible version)
+COPY requirements-docker.txt ./requirements.txt
 
-# Install Python dependencies
+# Upgrade pip and install Python dependencies
+RUN pip install --upgrade pip
 RUN pip install --no-cache-dir --user -r requirements.txt
 
 # Final stage
@@ -38,7 +39,7 @@ COPY --from=builder /root/.local /root/.local
 # Copy application code
 COPY app/ ./app/
 COPY main.py .
-COPY requirements.txt .
+COPY requirements-docker.txt ./requirements.txt
 
 # Create directories for models and cache (will be mounted as volumes)
 RUN mkdir -p /app/models /app/.cache/huggingface
