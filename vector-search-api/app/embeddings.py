@@ -4,9 +4,6 @@ from functools import lru_cache
 from typing import Iterable, List
 import numpy as np
 
-# fastembed (PyTorch 불필요 / ONNXRuntime)
-from fastembed import TextEmbedding
-
 # sentence-transformers (선택: ST 백엔드 쓸 때만)
 try:
     from sentence_transformers import SentenceTransformer  # pragma: no cover
@@ -69,14 +66,6 @@ def _norm(vec: List[float], enable: bool) -> List[float]:
         v = v / n
     return v.astype(np.float32).tolist()
 
-
-# --------- fastembed 로더 (경량/CPU 우선) ---------
-@lru_cache(maxsize=8)
-def _load_fastembed(name: str) -> TextEmbedding:
-    name = _resolve_name(name)
-    return TextEmbedding(model_name=name)
-
-
 # --------- ST 로더 (GPU/CPU 자동, trust_remote_code 지원) ---------
 _ST_CACHE = {}  # key=(name_resolved, device, trust) -> model
 
@@ -110,17 +99,10 @@ def _load_st(name: str):
 def embed_query(text: str, spec: ModelSpec) -> List[float]:
     """
     단일 쿼리 텍스트 → 벡터.
-    - fastembed: ONNXRuntime 기반 (CPU)
     - st: PyTorch 기반 (GPU/CPU 자동)
     """
     name = _resolve_name(spec.name)
     t = _e5_prefix(text, spec.e5_mode) if "e5" in name.lower() else text
-
-    if spec.backend == "fastembed":
-        model = _load_fastembed(name)
-        vec_gen: Iterable[List[float]] = model.embed([t])  # generator
-        vec = next(iter(vec_gen))
-        return _norm(vec, spec.normalize)
 
     # ST
     model, device = _load_st(name)
@@ -138,13 +120,6 @@ def embed_many(texts: List[str], spec: ModelSpec, batch_size: int = 64) -> List[
     배치 임베딩 유틸 (인덱싱/대량 처리용).
     """
     name = _resolve_name(spec.name)
-
-    if spec.backend == "fastembed":
-        model = _load_fastembed(name)
-        out: List[List[float]] = []
-        for vec in model.embed(texts, batch_size=batch_size):
-            out.append(_norm(vec, spec.normalize))
-        return out
 
     # ST
     model, device = _load_st(name)

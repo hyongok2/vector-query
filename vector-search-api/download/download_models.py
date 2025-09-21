@@ -10,7 +10,6 @@ MODELS = {
     #"gte-multilingual": "thenlper/gte-multilingual-base",
     #"jina-v2-base": "jinaai/jina-embeddings-v2-base-multilingual",
     #"nomic-embed": "nomic-ai/nomic-embed-text-v1",
-    #fastembed 계열도 HF 캐시에 받아두면 편합니다:
     "bge-m3": "BAAI/bge-m3",
     "mE5-small": "intfloat/multilingual-e5-small",
 }

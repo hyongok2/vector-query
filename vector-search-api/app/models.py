@@ -7,7 +7,7 @@ class QdrantCfg(BaseModel):
     query_filter: Optional[Dict[str, Any]] = None
 
 class ModelSpec(BaseModel):
-    backend: str = Field(default="fastembed", pattern="^(fastembed|st)$")
+    backend: str = Field(default="st", pattern="^(fastembed|st)$")
     name: str = "BAAI/bge-m3"
     normalize: bool = True
     e5_mode: str = Field(default="auto", pattern="^(auto|query|passage)$")

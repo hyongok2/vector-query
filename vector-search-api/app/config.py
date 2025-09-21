@@ -7,7 +7,7 @@ class Settings(BaseSettings):
     DEFAULT_COLLECTION: str = "docs_2025"
 
     # 모델 화이트리스트: "backend:name,backend:name"
-    ALLOW_MODELS: str = "fastembed:./models/bge-m3"
+    ALLOW_MODELS: str = "st:./models/bge-m3"
 
     # 보안/CORS
     API_KEY: Optional[str] = None

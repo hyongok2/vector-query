@@ -19,7 +19,7 @@ except Exception as e:
 
 # 2) 다운로드 목록 (preset_id -> (repo_id, trust_remote_code))
 MODELS = {
-    #fastembed 계열도 같이 받아두면 캐시/오프라인에 유리
+
     "bge-m3":            ("BAAI/bge-m3", False),
     "mE5-small":         ("intfloat/multilingual-e5-small", False),
 
