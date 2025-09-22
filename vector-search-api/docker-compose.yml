@@ -6,7 +6,7 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
-    image: vector-search-api:v1.0.1
+    image: vector-search-api:v1.0.2
     container_name: vector-search-api
     ports:
       - "5200:5200"
@@ -29,7 +29,7 @@ services:
     volumes:
       - ./app:/app/app:rw
       - ./models:/app/models:ro
-      - ./models_config.yaml:/app/models_config.yaml:ro
+      - ./config:/app/config:ro
       - model_cache:/app/.cache/huggingface
       - ./logs:/app/logs
     restart: unless-stopped

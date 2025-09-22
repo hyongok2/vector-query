@@ -49,8 +49,8 @@ def load_models_config(config_path: str = "models_config.yaml") -> Dict[str, Any
             "bge-m3": {"backend": "st", "name": "./models/bge-m3", "normalize": True, "e5_mode": "auto"}
         }
 
-# 환경변수로 설정 파일 경로 지정 가능
-CONFIG_PATH = os.getenv("MODELS_CONFIG_PATH", "models_config.yaml")
+# 환경변수로 설정 파일 경로 지정 가능 (기본값: config/models_config.yaml)
+CONFIG_PATH = os.getenv("MODELS_CONFIG_PATH", "config/models_config.yaml")
 
 # 모듈 로드 시 설정 읽기
 PRESETS = load_models_config(CONFIG_PATH)
