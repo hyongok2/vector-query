@@ -40,6 +40,8 @@ COPY --from=builder /root/.local /root/.local
 COPY app/ ./app/
 COPY main.py .
 COPY requirements-docker.txt ./requirements.txt
+# Copy models configuration file
+COPY models_config.yaml .
 
 # Create directories for models and cache (will be mounted as volumes)
 RUN mkdir -p /app/models /app/.cache/huggingface

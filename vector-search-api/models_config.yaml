@@ -1,0 +1,87 @@
+# Model Configuration File
+# 각 모델의 설정을 정의합니다.
+
+models:
+  # BGE-M3: 다국어 임베딩 모델
+  bge-m3:
+    backend: st
+    path: ./models/bge-m3
+    normalize: true
+    e5_mode: auto
+    description: "BAAI BGE-M3 multilingual embedding model"
+    dimension: 1024
+
+  # Multilingual E5 Series
+  mE5-small:
+    backend: st
+    path: ./models/mE5-small
+    normalize: true
+    e5_mode: query
+    description: "Multilingual E5 Small model"
+    dimension: 384
+
+  mE5-base:
+    backend: st
+    path: ./models/mE5-base
+    normalize: true
+    e5_mode: query
+    description: "Multilingual E5 Base model"
+    dimension: 768
+
+  mE5-large:
+    backend: st
+    path: ./models/mE5-large
+    normalize: true
+    e5_mode: query
+    description: "Multilingual E5 Large model"
+    dimension: 1024
+
+  # Paraphrase Multilingual
+  paraphrase-ml:
+    backend: st
+    path: ./models/paraphrase-ml
+    normalize: true
+    e5_mode: auto
+    description: "Paraphrase multilingual MiniLM"
+    dimension: 384
+
+  # Korean Models
+  ko-sbert:
+    backend: st
+    path: ./models/ko-sbert
+    normalize: true
+    e5_mode: auto
+    description: "Korean SBERT model"
+    dimension: 768
+
+  ko-sroberta:
+    backend: st
+    path: ./models/ko-sroberta
+    normalize: true
+    e5_mode: auto
+    description: "Korean SRoBERTa multitask model"
+    dimension: 768
+
+  ko-simcse:
+    backend: st
+    path: ./models/ko-simcse
+    normalize: true
+    e5_mode: auto
+    description: "Korean SimCSE RoBERTa model"
+    dimension: 768
+
+# Global settings
+settings:
+  # 기본 모델 (preset_id를 지정하지 않은 경우)
+  default_model: bge-m3
+
+  # 모델 로딩 시 trust_remote_code 허용 여부
+  trust_remote_code: false
+
+  # 캐시 설정
+  cache_models: true
+  max_cached_models: 5
+
+  # 성능 설정
+  batch_size: 32
+  max_sequence_length: 512

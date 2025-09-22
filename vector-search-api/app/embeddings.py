@@ -4,16 +4,10 @@ from functools import lru_cache
 from typing import Iterable, List
 import numpy as np
 
-# sentence-transformers (선택: ST 백엔드 쓸 때만)
-try:
-    from sentence_transformers import SentenceTransformer  # pragma: no cover
-    import torch  # pragma: no cover
-except Exception:
-    SentenceTransformer = None  # type: ignore
-    torch = None  # type: ignore
+from sentence_transformers import SentenceTransformer  # pragma: no cover
+import torch  # pragma: no cover
 
 from .models import ModelSpec
-
 
 # --------- 유틸 ---------
 def _e5_prefix(text: str, mode: str) -> str:

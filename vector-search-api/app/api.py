@@ -39,7 +39,6 @@ def models():
         pair = (spec["backend"], spec["name"])
         if pair in allow:
             items.append({"preset_id": pid, **spec})
-    # 백엔드/이름만 직접 쓰고 싶은 경우를 위해 허용쌍도 같이 노출
     return {"models": items}
 
 @app.post("/search", response_model=SearchResponse)
