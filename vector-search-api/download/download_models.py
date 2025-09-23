@@ -28,6 +28,9 @@ MODELS = {
     "ko-sbert":          ("snunlp/KR-SBERT-V40K-klueNLI-augSTS", False),
     "ko-sroberta":       ("jhgan/ko-sroberta-multitask", False),
     "ko-simcse":         ("BM-K/KoSimCSE-roberta-multitask", False),
+    "kure-v1":           ("nlpai-lab/kure-v1", False),
+    "bge-m3-ko":         ("dragonkue/BGE-m3-ko", False),
+    "ko-e5":             ("nlpai-lab/KoE5", False),
 }
 
 OUT_DIR = Path("../models")
@@ -55,9 +58,9 @@ def fallback_snapshot(repo_id: str, out: Path):
 def download_one(preset_id: str, repo_id: str, trust: bool):
     target = OUT_DIR / preset_id
     # 기존이 있으면 넘어가고 싶으면 주석 해제
-    # if target.exists():
-    #     print(f"[SKIP] exists: {target}")
-    #     return
+    if target.exists():
+        print(f"[SKIP] exists: {target}")
+        return
     try:
         try_sentence_transformers(repo_id, target, trust)
         return

@@ -70,6 +70,30 @@ models:
     description: "Korean SimCSE RoBERTa model"
     dimension: 768
 
+  kure-v1:
+    backend: st
+    path: ./models/kure-v1
+    normalize: true
+    e5_mode: auto
+    description: "SOTA Korean retrieval model based on BGE-M3"
+    dimension: 1024
+
+  bge-m3-ko:
+    backend: st
+    path: ./models/bge-m3-ko
+    normalize: true
+    e5_mode: auto
+    description: "Korean fine-tuned version of BGE-M3"
+    dimension: 1024
+
+  ko-e5:
+    backend: st
+    path: ./models/ko-e5
+    normalize: true
+    e5_mode: auto
+    description: "Korean E5 model, requires query/passage prefixes"
+    dimension: 1024
+    
 # Global settings
 settings:
   # 기본 모델 (preset_id를 지정하지 않은 경우)

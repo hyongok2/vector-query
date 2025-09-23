@@ -27,9 +27,9 @@ services:
       - HF_HUB_OFFLINE=1
       - TRANSFORMERS_OFFLINE=1
     volumes:
-      - ./app:/app/app:rw
-      - ./models:/app/models:ro
-      - ./config:/app/config:ro
+      - ./app:/app/app:rw # application code
+      - ./models:/app/models:ro # model files
+      - ./config:/app/config:ro # models_config.yaml
       - model_cache:/app/.cache/huggingface
       - ./logs:/app/logs
     restart: unless-stopped
