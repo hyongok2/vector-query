@@ -93,7 +93,7 @@ class AppSettings:
     """Application settings container"""
 
     DEFAULT_SETTINGS = {
-        'db_uri': '',
+        'db_uri': 'oracle+oracledb://system:oracle@localhost:1521/?service_name=XEPDB1',
         'sql': 'SELECT * FROM EMSWO',
         'pk_col': 'id',
         'template_str': '{{title}} - {{description}}',
@@ -101,11 +101,11 @@ class AppSettings:
         'strip_ws': True,
         'q_host': 'localhost',
         'q_port': 6333,
-        'collection': 'my_collection',
+        'collection': 'collection_name',
         'batch_size': 64,
         'model': 'mE5-base',
         'preview_rows': 50,
-        'max_rows': 0
+        'max_rows': 1000
     }
 
     def __init__(self, config_manager: ConfigManagerInterface):

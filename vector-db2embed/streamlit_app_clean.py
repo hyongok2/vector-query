@@ -66,9 +66,6 @@ class EmbeddingApp:
     def render_sidebar(self):
         """Render sidebar with all configuration options"""
         with st.sidebar:
-            # Settings save button
-            SettingsComponent.render(self.settings)
-
             # Database configuration
             db_uri, sql_query = DatabaseConfigComponent.render(self.settings)
 
@@ -84,22 +81,28 @@ class EmbeddingApp:
             # Processing options
             preview_rows, max_rows, batch_size = ProcessingOptionsComponent.render(self.settings)
 
-            # Update settings with current values
-            self.settings.update({
-                'db_uri': db_uri,
-                'sql': sql_query,
-                'pk_col': pk_col,
-                'template_str': template_str,
-                'max_chars': max_chars,
-                'strip_ws': strip_ws,
-                'model': model_name,
-                'q_host': q_host,
-                'q_port': q_port,
-                'collection': collection,
-                'preview_rows': preview_rows,
-                'max_rows': max_rows,
-                'batch_size': batch_size
-            })
+            # CRITICAL: Update settings with current session_state values
+            current_values = {
+                'db_uri': st.session_state.get('db_uri', ''),
+                'sql': st.session_state.get('sql', ''),
+                'pk_col': st.session_state.get('pk_col', 'id'),
+                'template_str': st.session_state.get('template_str', ''),
+                'max_chars': st.session_state.get('max_chars', 800),
+                'strip_ws': st.session_state.get('strip_ws', True),
+                'model': st.session_state.get('model', 'mE5-base'),
+                'q_host': st.session_state.get('q_host', 'localhost'),
+                'q_port': st.session_state.get('q_port', 6333),
+                'collection': st.session_state.get('collection', 'my_collection'),
+                'preview_rows': st.session_state.get('preview_rows', 50),
+                'max_rows': st.session_state.get('max_rows', 0),
+                'batch_size': st.session_state.get('batch_size', 64)
+            }
+
+            # Update settings with current values from session_state
+            self.settings.update(current_values)
+
+            # Settings save button (after updating settings)
+            SettingsComponent.render(self.settings)
 
     def render_main_content(self):
         """Render main content area"""
