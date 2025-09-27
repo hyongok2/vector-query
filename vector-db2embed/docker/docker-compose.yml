@@ -1,5 +1,3 @@
-version: '3.8'
-
 services:
   # Streamlit Application
   streamlit-app:
@@ -18,12 +16,10 @@ services:
       - QDRANT_HOST=host.docker.internal  # Connect to host's Qdrant
       - QDRANT_PORT=6333
     volumes:
-      - ../models:/app/models:ro  # Read-only model files
-      - ../config:/app/config:ro  # Configuration files
+      - ./models:/app/models:ro  # Read-only model files
+      - ./config:/app/config:ro  # Configuration files
       - app_data:/app/data  # Persistent storage for user settings
     restart: unless-stopped
-    # Use host network to access existing Qdrant
-    network_mode: host
 
 # Named volumes for persistent data
 volumes:

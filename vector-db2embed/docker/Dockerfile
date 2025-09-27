@@ -36,11 +36,6 @@ ENV PATH=/root/.local/bin:$PATH
 # Copy application code
 COPY . .
 
-# Create non-root user for security
-RUN useradd --create-home --shell /bin/bash streamlit_user && \
-    chown -R streamlit_user:streamlit_user /app
-USER streamlit_user
-
 # Expose port
 EXPOSE 8501
 
