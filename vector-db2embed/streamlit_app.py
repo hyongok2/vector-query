@@ -108,6 +108,10 @@ if 'collection' not in st.session_state:
     st.session_state.collection = "my_collection"
 if 'batch_size' not in st.session_state:
     st.session_state.batch_size = 64
+if 'preview_rows' not in st.session_state:
+    st.session_state.preview_rows = 50
+if 'max_rows' not in st.session_state:
+    st.session_state.max_rows = 0  # 0 = 제한 없음
 
 with st.sidebar:
     # 설정 저장 버튼을 작게 배치
@@ -125,6 +129,29 @@ with st.sidebar:
         key='db_uri'
     )
     sql = st.text_area("SQL 쿼리", value=st.session_state.sql, key='sql')
+
+    col1, col2 = st.columns(2)
+    with col1:
+        preview_rows = st.number_input(
+            "미리보기 행 수",
+            min_value=10,
+            max_value=1000,
+            value=st.session_state.preview_rows,
+            step=10,
+            key='preview_rows',
+            help="미리보기에 표시할 행 개수"
+        )
+    with col2:
+        max_rows = st.number_input(
+            "처리 최대 행 수",
+            min_value=0,
+            max_value=1000000,
+            value=st.session_state.max_rows,
+            step=1000,
+            key='max_rows',
+            help="0 = 제한 없음, 임베딩할 최대 행 수"
+        )
+
     preview_btn = st.button("쿼리 미리보기")
 
     pk_col = st.sidebar.text_input(
@@ -253,9 +280,9 @@ if preview_btn:
     else:
         try:
             df = pd.read_sql(st.session_state.sql, create_engine(st.session_state.db_uri))
-            table_slot.dataframe(df.head(50))
+            table_slot.dataframe(df.head(st.session_state.preview_rows))
             with log:
-                st.success(f"미리보기 성공: {len(df)} rows")
+                st.success(f"미리보기 성공: 총 {len(df)} rows 중 {min(len(df), st.session_state.preview_rows)}건 표시")
         except Exception as e:
             with log:
                 st.error(f"미리보기 실패: {e}")
@@ -268,7 +295,14 @@ if run_btn:
     try:
         engine = create_engine(st.session_state.db_uri)
         df = pd.read_sql(st.session_state.sql, engine)
-        table_slot.dataframe(df.head(50))
+
+        # 최대 행 수 제한 적용
+        if st.session_state.max_rows > 0 and len(df) > st.session_state.max_rows:
+            df = df.head(st.session_state.max_rows)
+            with log:
+                st.warning(f"최대 {st.session_state.max_rows}행만 처리합니다.")
+
+        table_slot.dataframe(df.head(st.session_state.preview_rows))
         with log:
             st.info(f"쿼리 완료: {len(df)} rows")
     except Exception as e:
