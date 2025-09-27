@@ -234,6 +234,17 @@ with st.sidebar:
         key='batch_size'
     )
 
+    # 현재 선택된 컬렉션 정보 표시
+    if st.session_state.collection:
+        try:
+            temp_qc = QdrantClient(host=st.session_state.q_host, port=st.session_state.q_port)
+            if st.session_state.collection in [c.name for c in temp_qc.get_collections().collections]:
+                coll_info = temp_qc.get_collection(st.session_state.collection)
+                count = temp_qc.count(st.session_state.collection)
+                st.info(f"📊 **{st.session_state.collection}**: {coll_info.config.params.vectors.size}차원, {count.count if count else 0}개 벡터")
+        except:
+            pass  # 연결 실패 시 조용히 무시
+
     st.divider()
     run_btn = st.button("✨ 임베딩 & 업서트 실행", use_container_width=True)
 
@@ -420,3 +431,95 @@ if run_btn:
         st.success(f"완료! 총 {total} 건, 소요 {dt:.1f}s")
     except Exception as e:
         st.error(f"업서트 중 오류: {e}")
+
+# 컬렉션 관리 섹션 (맨 아래)
+st.divider()
+st.header("📁 Qdrant 컬렉션 관리")
+
+# 자동으로 컬렉션 정보 표시 (버튼 없이)
+st.subheader("컬렉션 정보")
+try:
+    temp_qc = QdrantClient(host=st.session_state.q_host, port=st.session_state.q_port)
+    collections_info = temp_qc.get_collections()
+
+    if collections_info.collections:
+        st.subheader("📁 Qdrant 컬렉션 리스트")
+
+        collection_data = []
+        for coll in collections_info.collections:
+            # 각 컬렉션의 상세 정보 가져오기
+            try:
+                coll_info = temp_qc.get_collection(coll.name)
+                count = temp_qc.count(coll.name)
+                collection_data.append({
+                    "컬렉션": coll.name,
+                    "벡터 차원": coll_info.config.params.vectors.size,
+                    "거리 측정": coll_info.config.params.vectors.distance.value,
+                    "벡터 개수": count.count if count else 0,
+                    "상태": coll_info.status.value
+                })
+            except Exception as e:
+                collection_data.append({
+                    "컬렉션": coll.name,
+                    "벡터 차원": "N/A",
+                    "거리 측정": "N/A",
+                    "벡터 개수": "N/A",
+                    "상태": "Error"
+                })
+
+        # 테이블로 표시
+        df_collections = pd.DataFrame(collection_data)
+        st.dataframe(df_collections, use_container_width=True)
+
+        # 컬렉션 삭제
+        st.subheader("컬렉션 삭제")
+
+        collection_names = [coll.name for coll in collections_info.collections]
+
+        col1, col2 = st.columns(2)
+        with col1:
+            st.write("사용 가능한 컬렉션:")
+            for name in collection_names:
+                st.write(f"- {name}")
+
+        with col2:
+            target_collection = st.text_input(
+                "삭제할 컬렉션 이름 입력",
+                placeholder="예: my_collection",
+                key="target_collection_input"
+            )
+
+            if target_collection:
+                if st.button(f"🗑️ 삭제", key="delete_collection_btn"):
+                    if target_collection in collection_names:
+                        st.session_state.pending_delete = target_collection
+                        st.rerun()
+                    else:
+                        st.error(f"{target_collection}은(는) 존재하지 않는 컬렉션입니다.")
+
+        # 삭제 확인 다이얼로그
+        if "pending_delete" in st.session_state:
+            delete_name = st.session_state.pending_delete
+            st.error(f"⚠️ **{delete_name}** 컬렉션을 삭제하시겠습니까?")
+            col_yes, col_no = st.columns(2)
+            with col_yes:
+                if st.button(f"확인 - 삭제"):
+                    try:
+                        temp_qc.delete_collection(delete_name)
+                        st.success(f"{delete_name} 삭제됨")
+                        if st.session_state.collection == delete_name:
+                            st.session_state.collection = "my_collection"
+                        del st.session_state.pending_delete
+                        st.rerun()
+                    except Exception as e:
+                        st.error(f"삭제 실패: {e}")
+            with col_no:
+                if st.button("취소"):
+                    del st.session_state.pending_delete
+                    st.rerun()
+    else:
+        st.info("컬렉션이 없습니다.")
+
+except Exception as e:
+    st.error(f"Qdrant 연결 실패: {e}")
+    st.write("위의 Qdrant 호스트와 포트 설정을 확인하세요.")
