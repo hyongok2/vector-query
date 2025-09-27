@@ -5,12 +5,12 @@ import time
 from typing import Optional
 
 # Import our clean modules
-from model_management.embedding_model import EmbeddingModelFactory, ModelConfig
-from services.database_service import DatabaseServiceFactory, QueryValidator
-from services.qdrant_service import QdrantServiceFactory, BatchProcessor
-from services.text_processor import TextProcessorFactory
-from utils.config_manager import ConfigManagerFactory
-from components.ui_components import (
+from src.model_management.embedding_model import EmbeddingModelFactory, ModelConfig
+from src.services.database_service import DatabaseServiceFactory, QueryValidator
+from src.services.qdrant_service import QdrantServiceFactory, BatchProcessor
+from src.services.text_processor import TextProcessorFactory
+from src.utils.config_manager import ConfigManagerFactory
+from src.components.ui_components import (
     DatabaseConfigComponent,
     TextProcessingConfigComponent,
     EmbeddingModelComponent,

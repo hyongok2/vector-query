@@ -4,9 +4,9 @@ import pandas as pd
 import time
 from typing import List, Dict, Any, Optional, Callable, Tuple
 
-from model_management.embedding_model import EmbeddingModelFactory, ModelConfig
-from services.qdrant_service import QdrantService
-from utils.config_manager import AppSettings
+from src.model_management.embedding_model import EmbeddingModelFactory, ModelConfig
+from src.services.qdrant_service import QdrantService
+from src.utils.config_manager import AppSettings
 
 
 class DatabaseConfigComponent:
