@@ -52,7 +52,10 @@ def save_settings():
         'q_host': st.session_state.get('q_host', 'localhost'),
         'q_port': st.session_state.get('q_port', 6333),
         'collection': st.session_state.get('collection', 'my_collection'),
-        'batch_size': st.session_state.get('batch_size', 64)
+        'batch_size': st.session_state.get('batch_size', 64),
+        'model': st.session_state.get('model', 'mE5-base'),
+        'preview_rows': st.session_state.get('preview_rows', 50),
+        'max_rows': st.session_state.get('max_rows', 0)
     }
 
     try:
@@ -112,6 +115,8 @@ if 'preview_rows' not in st.session_state:
     st.session_state.preview_rows = 50
 if 'max_rows' not in st.session_state:
     st.session_state.max_rows = 0  # 0 = 제한 없음
+if 'model' not in st.session_state:
+    st.session_state.model = "mE5-base"  # 기본 모델
 
 with st.sidebar:
     # 설정 저장 버튼을 작게 배치
@@ -201,8 +206,9 @@ with st.sidebar:
     model_name = st.selectbox(
         "임베딩 모델",
         model_list,
-        index=model_list.index(default_model) if default_model in model_list else 0,
-        format_func=lambda x: f"{x} ({models[x]['description']})" if x in models else x
+        index=model_list.index(st.session_state.model) if st.session_state.model in model_list else 0,
+        format_func=lambda x: f"{x} ({models[x]['description']})" if x in models else x,
+        key="model"
     )
 
     # 선택된 모델의 차원 정보 표시
@@ -316,6 +322,7 @@ if run_btn:
         table_slot.dataframe(df.head(st.session_state.preview_rows))
         with log:
             st.info(f"쿼리 완료: {len(df)} rows")
+
     except Exception as e:
         st.error(f"DB 쿼리 실패: {e}")
         st.stop()
@@ -425,8 +432,31 @@ if run_btn:
             qc.upsert(collection_name=st.session_state.collection, points=points)
 
             done += len(part)
-            progress.progress(min(done/total, 1.0),
-                              text=f"임베딩/업서트 {done}/{total} ({int(100*done/total)}%)")
+
+            # 실시간 남은 시간 계산
+            elapsed_time = time.time() - t0
+            if done > 0:
+                avg_time_per_item = elapsed_time / done
+                remaining_items = total - done
+                remaining_time = avg_time_per_item * remaining_items
+
+                # 시간 표시 형식 변환
+                if remaining_time < 60:
+                    time_str = f"{remaining_time:.1f}초"
+                elif remaining_time < 3600:
+                    minutes = int(remaining_time // 60)
+                    seconds = int(remaining_time % 60)
+                    time_str = f"{minutes}분 {seconds}초"
+                else:
+                    hours = int(remaining_time // 3600)
+                    minutes = int((remaining_time % 3600) // 60)
+                    time_str = f"{hours}시간 {minutes}분"
+
+                progress_text = f"임베딩/업서트 {done}/{total} ({int(100*done/total)}%) - 남은 시간: {time_str}"
+            else:
+                progress_text = f"임베딩/업서트 {done}/{total} ({int(100*done/total)}%)"
+
+            progress.progress(min(done/total, 1.0), text=progress_text)
         dt = time.time() - t0
         st.success(f"완료! 총 {total} 건, 소요 {dt:.1f}s")
     except Exception as e:
