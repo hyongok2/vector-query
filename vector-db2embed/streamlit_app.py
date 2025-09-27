@@ -1,555 +1,443 @@
+"""Clean, refactored Streamlit application for DB to Vector embedding"""
 import streamlit as st
 import pandas as pd
-import numpy as np
-from sqlalchemy import create_engine
-from jinja2 import Template
-from qdrant_client import QdrantClient
-from qdrant_client.http.models import VectorParams, Distance, PointStruct
-from sentence_transformers import SentenceTransformer
-import hashlib, math, time
-import uuid
-import yaml
-import os
-import json
-import socket
-import hashlib
+import time
+from typing import Optional
 
-# 사용자 IP 가져오기
-def get_user_ip():
-    """사용자 IP 또는 고유 식별자 가져오기"""
-    try:
-        # Streamlit Cloud에서 실행 중인 경우
-        headers = st.context.headers if hasattr(st, 'context') else {}
-        ip = headers.get('X-Forwarded-For', '')
-        if ip:
-            ip = ip.split(',')[0].strip()
+# Import our clean modules
+from src.model_management.embedding_model import EmbeddingModelFactory, ModelConfig
+from src.services.database_service import DatabaseServiceFactory, QueryValidator
+from src.services.qdrant_service import QdrantServiceFactory, BatchProcessor
+from src.services.text_processor import TextProcessorFactory
+from src.utils.config_manager import ConfigManagerFactory
+from src.components.ui_components import (
+    DatabaseConfigComponent,
+    TextProcessingConfigComponent,
+    EmbeddingModelComponent,
+    QdrantConfigComponent,
+    ProcessingOptionsComponent,
+    CollectionInfoComponent,
+    ProgressComponent,
+    CollectionManagerComponent,
+    SettingsComponent
+)
 
-        # 로컬에서 실행 중인 경우
-        if not ip:
-            hostname = socket.gethostname()
-            ip = socket.gethostbyname(hostname)
 
-        # IP를 해시하여 파일명으로 사용 (개인정보 보호)
-        ip_hash = hashlib.md5(ip.encode()).hexdigest()[:8]
-        return ip_hash
-    except:
-        return 'default'
+class EmbeddingApp:
+    """Main application controller"""
 
-# 사용자별 설정 파일 경로
-def get_settings_file():
-    user_id = get_user_ip()
-    return f'user_settings_{user_id}.json'
+    def __init__(self):
+        self.setup_page_config()
+        self.initialize_services()
+        self.initialize_session_state()
 
-def save_settings():
-    """현재 설정을 사용자별 파일로 저장"""
-    settings = {
-        'db_uri': st.session_state.get('db_uri', ''),
-        'sql': st.session_state.get('sql', 'SELECT * FROM EMSWO'),
-        'pk_col': st.session_state.get('pk_col', 'id'),
-        'template_str': st.session_state.get('template_str', '{{title}} - {{description}}'),
-        'max_chars': st.session_state.get('max_chars', 800),
-        'strip_ws': st.session_state.get('strip_ws', True),
-        'q_host': st.session_state.get('q_host', 'localhost'),
-        'q_port': st.session_state.get('q_port', 6333),
-        'collection': st.session_state.get('collection', 'my_collection'),
-        'batch_size': st.session_state.get('batch_size', 64),
-        'model': st.session_state.get('model', 'mE5-base'),
-        'preview_rows': st.session_state.get('preview_rows', 50),
-        'max_rows': st.session_state.get('max_rows', 0)
-    }
+    def setup_page_config(self):
+        """Setup Streamlit page configuration"""
+        st.set_page_config(
+            page_title="DB → Text → Embedding → Qdrant",
+            layout="wide"
+        )
+        st.title("DB → Text → Embedding → Qdrant")
 
-    try:
-        settings_file = get_settings_file()
-        with open(settings_file, 'w', encoding='utf-8') as f:
-            json.dump(settings, f, ensure_ascii=False, indent=2)
-        return True
-    except Exception as e:
-        st.error(f"설정 저장 실패: {e}")
-        return False
+    def initialize_services(self):
+        """Initialize all services and components"""
+        # Configuration
+        self.config_manager = ConfigManagerFactory.create_file_manager()
+        self.settings = ConfigManagerFactory.create_app_settings(self.config_manager)
 
-def load_settings():
-    """사용자별 저장된 설정을 파일에서 로드"""
-    try:
-        settings_file = get_settings_file()
-        if os.path.exists(settings_file):
-            with open(settings_file, 'r', encoding='utf-8') as f:
-                settings = json.load(f)
-                for key, value in settings.items():
+        # Model management
+        self.model_config = ModelConfig()
+        self.model_factory = EmbeddingModelFactory(self.model_config)
+
+        # Services (will be created as needed)
+        self.database_service = None
+        self.qdrant_service = None
+        self.text_processor = TextProcessorFactory.create_processor()
+
+    def initialize_session_state(self):
+        """Initialize Streamlit session state with saved settings"""
+        if 'settings_loaded' not in st.session_state:
+            # Load all settings into session state
+            for key, value in self.settings.get_all().items():
+                if key not in st.session_state:
                     st.session_state[key] = value
-                return True
-    except Exception as e:
-        # 에러는 조용히 처리 (처음 사용하는 경우 파일이 없을 수 있음)
-        pass
-    return False
+            st.session_state.settings_loaded = True
 
-st.set_page_config(page_title="DB → Text → Embedding → Qdrant", layout="wide")
-st.title("DB → Text → Embedding → Qdrant")
+    def render_sidebar(self):
+        """Render sidebar with all configuration options"""
+        with st.sidebar:
+            # Database configuration
+            db_uri, sql_query = DatabaseConfigComponent.render(self.settings)
 
-# 저장된 설정 파일에서 로드
-if 'settings_loaded' not in st.session_state:
-    load_settings()
-    st.session_state.settings_loaded = True
+            # Text processing configuration
+            pk_col, template_str, max_chars, strip_ws = TextProcessingConfigComponent.render(self.settings)
 
-# Session State 초기화 (파일에서 로드되지 않은 경우 기본값 사용)
-if 'db_uri' not in st.session_state:
-    st.session_state.db_uri = ""
-if 'sql' not in st.session_state:
-    st.session_state.sql = "SELECT * FROM EMSWO"
-if 'pk_col' not in st.session_state:
-    st.session_state.pk_col = "id"
-if 'template_str' not in st.session_state:
-    st.session_state.template_str = "{{title}} - {{description}}"
-if 'max_chars' not in st.session_state:
-    st.session_state.max_chars = 800
-if 'strip_ws' not in st.session_state:
-    st.session_state.strip_ws = True
-if 'q_host' not in st.session_state:
-    st.session_state.q_host = "localhost"
-if 'q_port' not in st.session_state:
-    st.session_state.q_port = 6333
-if 'collection' not in st.session_state:
-    st.session_state.collection = "my_collection"
-if 'batch_size' not in st.session_state:
-    st.session_state.batch_size = 64
-if 'preview_rows' not in st.session_state:
-    st.session_state.preview_rows = 50
-if 'max_rows' not in st.session_state:
-    st.session_state.max_rows = 0  # 0 = 제한 없음
-if 'model' not in st.session_state:
-    st.session_state.model = "mE5-base"  # 기본 모델
+            # Embedding model selection
+            model_name, dimension = EmbeddingModelComponent.render(self.settings, self.model_factory)
 
-with st.sidebar:
-    # 설정 저장 버튼을 작게 배치
-    col1, col2 = st.columns([1, 2])
-    with col1:
-        if st.button("💾", help="현재 설정 저장"):
-            if save_settings():
-                st.success("저장됨")
+            # Qdrant configuration
+            q_host, q_port, collection = QdrantConfigComponent.render(self.settings)
 
-    st.header("1) DB 설정")
-    db_uri = st.text_input(
-        "DB URI",
-        value=st.session_state.db_uri,
-        placeholder="예) oracle+oracledb://system:oracle@localhost:1521/?service_name=XEPDB1",
-        key='db_uri'
-    )
-    sql = st.text_area("SQL 쿼리", value=st.session_state.sql, key='sql')
+            # Processing options
+            preview_rows, max_rows, batch_size = ProcessingOptionsComponent.render(self.settings)
 
-    col1, col2 = st.columns(2)
-    with col1:
-        preview_rows = st.number_input(
-            "미리보기 행 수",
-            min_value=10,
-            max_value=1000,
-            value=st.session_state.preview_rows,
-            step=10,
-            key='preview_rows',
-            help="미리보기에 표시할 행 개수"
-        )
-    with col2:
-        max_rows = st.number_input(
-            "처리 최대 행 수",
-            min_value=0,
-            max_value=1000000,
-            value=st.session_state.max_rows,
-            step=1000,
-            key='max_rows',
-            help="0 = 제한 없음, 임베딩할 최대 행 수"
-        )
+            # CRITICAL: Update settings with current session_state values
+            current_values = {
+                'db_uri': st.session_state.get('db_uri', ''),
+                'sql': st.session_state.get('sql', ''),
+                'pk_col': st.session_state.get('pk_col', 'id'),
+                'template_str': st.session_state.get('template_str', ''),
+                'max_chars': st.session_state.get('max_chars', 800),
+                'strip_ws': st.session_state.get('strip_ws', True),
+                'model': st.session_state.get('model', 'mE5-base'),
+                'q_host': st.session_state.get('q_host', 'localhost'),
+                'q_port': st.session_state.get('q_port', 6333),
+                'collection': st.session_state.get('collection', 'my_collection'),
+                'preview_rows': st.session_state.get('preview_rows', 50),
+                'max_rows': st.session_state.get('max_rows', 0),
+                'batch_size': st.session_state.get('batch_size', 64)
+            }
 
-    preview_btn = st.button("쿼리 미리보기")
+            # Update settings with current values from session_state
+            self.settings.update(current_values)
 
-    pk_col = st.sidebar.text_input(
-        "원본 PK 컬럼명(선택)",
-        value=st.session_state.pk_col,
-        key='pk_col',
-        help="payload에 원본 PK 저장 및 포인트ID 구성에 사용"
-    )
+            # Settings save button (after updating settings)
+            SettingsComponent.render(self.settings)
 
-    st.divider()
-    st.header("2) 텍스트 빌드/청킹")
-    template_str = st.text_area(
-        "Jinja 템플릿",
-        value=st.session_state.template_str,
-        height=100,
-        key='template_str',
-        help="예: {{id}} | {{title}} — {{description}}"
-    )
-    max_chars = st.slider(
-        "청킹 최대 문자 수",
-        200, 3000,
-        value=st.session_state.max_chars,
-        key='max_chars'
-    )
-    strip_ws = st.checkbox(
-        "공백 정리(strip)",
-        value=st.session_state.strip_ws,
-        key='strip_ws'
-    )
+    def render_main_content(self):
+        """Render main content area"""
+        # Collection info display
+        self.render_collection_info()
 
-    st.divider()
-    st.header("3) 임베딩 & Qdrant")
+        # Action buttons
+        col1, col2 = st.columns(2)
+        with col1:
+            preview_btn = st.button("👁️ 데이터 미리보기", use_container_width=True)
+        with col2:
+            run_btn = st.button("✨ 임베딩 & 업서트 실행", use_container_width=True)
 
-    # models_config.yaml에서 모델 정보 로드
-    try:
-        with open('models_config.yaml', 'r', encoding='utf-8') as f:
-            config = yaml.safe_load(f)
-            models = config.get('models', {})
-            model_list = list(models.keys())
-            default_model = config.get('settings', {}).get('default_model', model_list[0] if model_list else None)
-    except Exception as e:
-        st.error(f"models_config.yaml 로드 실패: {e}")
-        models = {}
-        model_list = ["bge-m3"]
-        default_model = "bge-m3"
+        # Status area
+        log = st.container()
+        table_slot = st.empty()
 
-    model_name = st.selectbox(
-        "임베딩 모델",
-        model_list,
-        index=model_list.index(st.session_state.model) if st.session_state.model in model_list else 0,
-        format_func=lambda x: f"{x} ({models[x]['description']})" if x in models else x,
-        key="model"
-    )
+        # Handle button clicks
+        if preview_btn:
+            self.handle_preview(log, table_slot)
 
-    # 선택된 모델의 차원 정보 표시
-    if model_name in models:
-        model_info = models[model_name]
-        st.info(f"벡터 차원: {model_info['dimension']} | 경로: {model_info['path']}")
-    q_host = st.text_input(
-        "Qdrant Host",
-        value=st.session_state.q_host,
-        key='q_host'
-    )
-    q_port = st.number_input(
-        "Qdrant Port",
-        min_value=1,
-        max_value=65535,
-        value=st.session_state.q_port,
-        key='q_port'
-    )
-    collection = st.text_input(
-        "컬렉션 이름",
-        value=st.session_state.collection,
-        key='collection'
-    )
-    batch_size = st.slider(
-        "배치 크기(임베딩/업서트)",
-        16, 512,
-        value=st.session_state.batch_size,
-        step=16,
-        key='batch_size'
-    )
+        if run_btn:
+            self.handle_embedding_process(log, table_slot)
 
-    # 현재 선택된 컬렉션 정보 표시
-    if st.session_state.collection:
+    def render_collection_info(self):
+        """Render collection information if available"""
         try:
-            temp_qc = QdrantClient(host=st.session_state.q_host, port=st.session_state.q_port)
-            if st.session_state.collection in [c.name for c in temp_qc.get_collections().collections]:
-                coll_info = temp_qc.get_collection(st.session_state.collection)
-                count = temp_qc.count(st.session_state.collection)
-                st.info(f"📊 **{st.session_state.collection}**: {coll_info.config.params.vectors.size}차원, {count.count if count else 0}개 벡터")
-        except:
-            pass  # 연결 실패 시 조용히 무시
+            qdrant_service = self.get_qdrant_service()
+            CollectionInfoComponent.render(qdrant_service, self.settings.get('collection'))
+        except Exception:
+            pass  # Silently ignore if Qdrant is not available
 
-    st.divider()
-    run_btn = st.button("✨ 임베딩 & 업서트 실행", use_container_width=True)
+    def handle_preview(self, log, table_slot):
+        """Handle data preview request"""
+        db_uri = self.settings.get('db_uri')
+        sql_query = self.settings.get('sql')
 
-# 상태 영역
-log = st.container()
-table_slot = st.empty()
+        if not db_uri or not sql_query:
+            st.error("DB URI와 SQL 쿼리를 입력하세요.")
+            return
 
-def l2_normalize(vectors: np.ndarray) -> np.ndarray:
-    norms = np.linalg.norm(vectors, axis=1, keepdims=True) + 1e-12
-    return vectors / norms
-
-def build_text_rows(df: pd.DataFrame, tmpl: Template, max_chars: int, strip_ws: bool, pk_col: str):
-    texts = []
-    for _, row in df.iterrows():
-        row_dict = row.to_dict()
-        txt = tmpl.render(**row_dict)
-        if strip_ws:
-            txt = " ".join(txt.split())
-
-        # PK 값 가져오기
-        pk_value = row_dict.get(pk_col, _) if pk_col and pk_col in row_dict else _
-
-        # 청킹 (문자 기반)
-        chunks = []
-        for s in range(0, len(txt), max_chars):
-            chunk = txt[s:s+max_chars]
-            if chunk and chunk.strip():
-                chunks.append(chunk)
-
-        # 각 청크에 PK와 chunk_index 추가
-        for chunk_idx, chunk_text in enumerate(chunks):
-            texts.append({
-                "row_index": int(_),
-                "pk": pk_value,
-                "chunk_index": chunk_idx,
-                "text": chunk_text,
-                "source_row": row_dict  # 원본 행 데이터 저장
-            })
-    return texts
-
-if preview_btn:
-    if not st.session_state.db_uri or not st.session_state.sql:
-        st.error("DB URI와 SQL 쿼리를 입력하세요.")
-    else:
         try:
-            df = pd.read_sql(st.session_state.sql, create_engine(st.session_state.db_uri))
-            table_slot.dataframe(df.head(st.session_state.preview_rows))
+            # Validate query
+            QueryValidator.validate_query(sql_query)
+
+            # Execute query
+            database_service = self.get_database_service()
+            df = database_service.execute_query(sql_query)
+
+            # Display preview
+            preview_rows = self.settings.get('preview_rows', 50)
+            table_slot.dataframe(df.head(preview_rows))
+
             with log:
-                st.success(f"미리보기 성공: 총 {len(df)} rows 중 {min(len(df), st.session_state.preview_rows)}건 표시")
+                st.success(f"미리보기 성공: 총 {len(df)} rows 중 {min(len(df), preview_rows)}건 표시")
+
         except Exception as e:
             with log:
                 st.error(f"미리보기 실패: {e}")
 
-if run_btn:
-    if not st.session_state.db_uri or not st.session_state.sql or not st.session_state.collection:
-        st.error("DB URI, SQL, 컬렉션 이름을 입력하세요.")
-        st.stop()
+    def handle_embedding_process(self, log, table_slot):
+        """Handle the complete embedding and upserting process"""
+        # Validate inputs
+        db_uri = self.settings.get('db_uri')
+        sql_query = self.settings.get('sql')
+        collection = self.settings.get('collection')
 
-    try:
-        engine = create_engine(st.session_state.db_uri)
-        df = pd.read_sql(st.session_state.sql, engine)
+        if not db_uri or not sql_query or not collection:
+            st.error("DB URI, SQL, 컬렉션 이름을 입력하세요.")
+            return
 
-        # 최대 행 수 제한 적용
-        if st.session_state.max_rows > 0 and len(df) > st.session_state.max_rows:
-            df = df.head(st.session_state.max_rows)
+        try:
+            # Step 1: Execute query and get data
             with log:
-                st.warning(f"최대 {st.session_state.max_rows}행만 처리합니다.")
+                st.info("🔍 데이터베이스에서 데이터 가져오는 중...")
 
-        table_slot.dataframe(df.head(st.session_state.preview_rows))
-        with log:
-            st.info(f"쿼리 완료: {len(df)} rows")
+            database_service = self.get_database_service()
+            QueryValidator.validate_query(sql_query)
+            df = database_service.execute_query(sql_query)
 
-    except Exception as e:
-        st.error(f"DB 쿼리 실패: {e}")
-        st.stop()
+            # Apply max rows limit
+            max_rows = self.settings.get('max_rows', 0)
+            if max_rows > 0 and len(df) > max_rows:
+                df = df.head(max_rows)
+                with log:
+                    st.warning(f"최대 {max_rows}행만 처리합니다.")
 
-    # 텍스트 빌드 & 청킹
-    try:
-        tmpl = Template(st.session_state.template_str)
-        docs = build_text_rows(df, tmpl, st.session_state.max_chars, st.session_state.strip_ws, st.session_state.pk_col)
-        if not docs:
-            st.warning("생성된 텍스트가 없습니다. 템플릿/쿼리를 확인하세요.")
-            st.stop()
-        st.info(f"청킹 결과 문서 수: {len(docs)}")
-    except Exception as e:
-        st.error(f"텍스트 빌드 실패: {e}")
-        st.stop()
+            # Display data
+            preview_rows = self.settings.get('preview_rows', 50)
+            table_slot.dataframe(df.head(preview_rows))
 
-    # 임베딩 모델 로딩
-    try:
-        # models_config.yaml에서 모델 정보 가져오기
-        with open('models_config.yaml', 'r', encoding='utf-8') as f:
-            config = yaml.safe_load(f)
-            models = config.get('models', {})
+            with log:
+                st.info(f"쿼리 완료: {len(df)} rows")
 
-        if model_name in models:
-            model_info = models[model_name]
-            model_path = model_info['path']
-            dim = model_info['dimension']
+            # Step 2: Process text documents
+            with log:
+                st.info("📝 텍스트 처리 및 청킹 중...")
 
-            # 모델 경로가 존재하는지 확인
-            if os.path.exists(model_path):
-                st.info(f"모델 로딩: {model_name} from {model_path}")
-                model = SentenceTransformer(model_path)
-            else:
-                st.warning(f"로컬 모델 경로 없음: {model_path}. HuggingFace에서 다운로드 시도...")
-                # HuggingFace 모델 이름으로 변환 시도
-                hf_model_map = {
-                    'bge-m3': 'BAAI/bge-m3',
-                    'mE5-small': 'intfloat/multilingual-e5-small',
-                    'mE5-base': 'intfloat/multilingual-e5-base',
-                    'mE5-large': 'intfloat/multilingual-e5-large',
-                    'paraphrase-ml': 'sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2'
-                }
-                hf_model = hf_model_map.get(model_name, model_name)
-                model = SentenceTransformer(hf_model)
-        else:
-            st.error(f"모델 정보를 찾을 수 없음: {model_name}")
-            st.stop()
-
-    except Exception as e:
-        st.error(f"임베딩 모델 로딩 실패: {e}")
-        st.stop()
-
-    # Qdrant 준비
-    try:
-        qc = QdrantClient(host=st.session_state.q_host, port=st.session_state.q_port, api_key=None)
-        existing = [c.name for c in qc.get_collections().collections]
-        if st.session_state.collection not in existing:
-            qc.recreate_collection(
-                collection_name=st.session_state.collection,
-                vectors_config=VectorParams(size=dim, distance=Distance.COSINE),
+            documents = self.text_processor.build_text_documents(
+                df=df,
+                template=self.settings.get('template_str'),
+                pk_column=self.settings.get('pk_col'),
+                max_chars=self.settings.get('max_chars'),
+                strip_whitespace=self.settings.get('strip_ws')
             )
-            st.success(f"컬렉션 생성: {st.session_state.collection} (size={dim}, distance=Cosine)")
-        else:
-            st.info(f"컬렉션 존재: {st.session_state.collection}")
-    except Exception as e:
-        st.error(f"Qdrant 연결/컬렉션 준비 실패: {e}")
-        st.stop()
 
-    # 진행률 바
-    progress = st.progress(0, text="임베딩/업서트 진행 중…")
-    total = len(docs)
-    done = 0
-    t0 = time.time()
+            if not documents:
+                st.error("처리된 텍스트가 없습니다. 템플릿이나 데이터를 확인하세요.")
+                return
 
-    # 배치 처리
-    try:
-        for i in range(0, total, st.session_state.batch_size):
-            part = docs[i:i+st.session_state.batch_size]
-            texts = [d["text"] for d in part]
-            vecs = model.encode(texts, convert_to_numpy=True, show_progress_bar=False)
-            vecs = l2_normalize(vecs)  # 코사인용 정규화
+            with log:
+                st.info(f"텍스트 처리 완료: {len(documents)} 개 청크 생성")
 
-            points = []
-            for d, v in zip(part, vecs):
-                # PK와 chunk_index를 기반으로 고정 ID 생성
-                # 이렇게 하면 같은 PK의 같은 청크는 항상 같은 ID를 가짐
-                pk_str = str(d["pk"])
-                chunk_idx = d["chunk_index"]
+            # Step 3: Load embedding model
+            with log:
+                st.info("🤖 임베딩 모델 로딩 중...")
 
-                # PK와 chunk_index를 함께 해시하여 고유 ID 생성
-                id_string = f"{pk_str}::{chunk_idx}"
-                hash_bytes = hashlib.sha256(id_string.encode("utf-8")).digest()
-                pid = int.from_bytes(hash_bytes[:8], "big") & ((1 << 64) - 1)  # uint64 정수
+            model_name = self.settings.get('model')
+            embedding_model = self.model_factory.create_model(model_name)
+            dimension = embedding_model.get_dimension()
 
-                points.append(PointStruct(
-                    id=pid,
-                    vector=v.tolist(),
-                    payload={
-                        "text": d["text"],
-                        "pk": d["pk"],
-                        "chunk_index": d["chunk_index"],
-                        "row_index": d["row_index"],
-                        "source_row": d.get("source_row", {})  # 원본 행 데이터
-                    }
-                ))
+            with log:
+                st.info(f"모델 로딩 완료: {model_name} ({dimension}차원)")
 
-            qc.upsert(collection_name=st.session_state.collection, points=points)
+            # Step 4: Prepare Qdrant
+            with log:
+                st.info("🎯 Qdrant 컬렉션 준비 중...")
 
-            done += len(part)
+            qdrant_service = self.get_qdrant_service()
+            created = qdrant_service.ensure_collection(collection, dimension)
 
-            # 실시간 남은 시간 계산
-            elapsed_time = time.time() - t0
-            if done > 0:
-                avg_time_per_item = elapsed_time / done
-                remaining_items = total - done
-                remaining_time = avg_time_per_item * remaining_items
-
-                # 시간 표시 형식 변환
-                if remaining_time < 60:
-                    time_str = f"{remaining_time:.1f}초"
-                elif remaining_time < 3600:
-                    minutes = int(remaining_time // 60)
-                    seconds = int(remaining_time % 60)
-                    time_str = f"{minutes}분 {seconds}초"
+            with log:
+                if created:
+                    st.success(f"컬렉션 생성: {collection} (size={dimension}, distance=Cosine)")
                 else:
-                    hours = int(remaining_time // 3600)
-                    minutes = int((remaining_time % 3600) // 60)
-                    time_str = f"{hours}시간 {minutes}분"
+                    st.info(f"컬렉션 존재: {collection}")
 
-                progress_text = f"임베딩/업서트 {done}/{total} ({int(100*done/total)}%) - 남은 시간: {time_str}"
-            else:
-                progress_text = f"임베딩/업서트 {done}/{total} ({int(100*done/total)}%)"
+            # Step 5: Generate embeddings and upsert
+            with log:
+                st.info("⚡ 임베딩 생성 및 업서트 중...")
 
-            progress.progress(min(done/total, 1.0), text=progress_text)
-        dt = time.time() - t0
-        st.success(f"완료! 총 {total} 건, 소요 {dt:.1f}s")
-    except Exception as e:
-        st.error(f"업서트 중 오류: {e}")
+            # 전체 시간 측정 시작
+            total_start_time = time.time()
 
-# 컬렉션 관리 섹션 (맨 아래)
-st.divider()
-st.header("📁 Qdrant 컬렉션 관리")
+            # Create progress bar directly
+            progress_bar = st.progress(0, text="시작 중...")
+            status_text = st.empty()
 
-# 자동으로 컬렉션 정보 표시 (버튼 없이)
-st.subheader("컬렉션 정보")
-try:
-    temp_qc = QdrantClient(host=st.session_state.q_host, port=st.session_state.q_port)
-    collections_info = temp_qc.get_collections()
+            # Prepare batch processor
+            batch_size = self.settings.get('batch_size', 64)
+            batch_processor = BatchProcessor(qdrant_service, batch_size)
 
-    if collections_info.collections:
-        st.subheader("📁 Qdrant 컬렉션 리스트")
+            # Generate embeddings in batches with progress
+            texts = [doc["text"] for doc in documents]
+            embeddings = []
+            total_texts = len(texts)
 
-        collection_data = []
-        for coll in collections_info.collections:
-            # 각 컬렉션의 상세 정보 가져오기
-            try:
-                coll_info = temp_qc.get_collection(coll.name)
-                count = temp_qc.count(coll.name)
-                collection_data.append({
-                    "컬렉션": coll.name,
-                    "벡터 차원": coll_info.config.params.vectors.size,
-                    "거리 측정": coll_info.config.params.vectors.distance.value,
-                    "벡터 개수": count.count if count else 0,
-                    "상태": coll_info.status.value
-                })
-            except Exception as e:
-                collection_data.append({
-                    "컬렉션": coll.name,
-                    "벡터 차원": "N/A",
-                    "거리 측정": "N/A",
-                    "벡터 개수": "N/A",
-                    "상태": "Error"
-                })
+            # Create status placeholder
+            status_placeholder = st.empty()
 
-        # 테이블로 표시
-        df_collections = pd.DataFrame(collection_data)
-        st.dataframe(df_collections, use_container_width=True)
+            # Variables for time estimation
+            avg_time_per_batch = None
+            batches_completed = 0
+            total_batches = (total_texts + batch_size - 1) // batch_size
 
-        # 컬렉션 삭제
-        st.subheader("컬렉션 삭제")
+            for i in range(0, total_texts, batch_size):
+                batch_texts = texts[i:i + batch_size]
+                current_batch_size = len(batch_texts)
+                current_batch_num = batches_completed + 1
 
-        collection_names = [coll.name for coll in collections_info.collections]
+                # Show status before processing current batch
+                if avg_time_per_batch and batches_completed > 0:
+                    # 현재 배치 처리 예상 시간
+                    estimated_batch_time = avg_time_per_batch
+                    remaining_batches = total_batches - current_batch_num
+                    remaining_time_total = avg_time_per_batch * remaining_batches
 
-        col1, col2 = st.columns(2)
-        with col1:
-            st.write("사용 가능한 컬렉션:")
-            for name in collection_names:
-                st.write(f"- {name}")
+                    if estimated_batch_time < 60:
+                        batch_time_str = f"{estimated_batch_time:.1f}초"
+                    else:
+                        minutes = int(estimated_batch_time // 60)
+                        seconds = int(estimated_batch_time % 60)
+                        batch_time_str = f"{minutes}분 {seconds}초"
 
-        with col2:
-            target_collection = st.text_input(
-                "삭제할 컬렉션 이름 입력",
-                placeholder="예: my_collection",
-                key="target_collection_input"
+                    if remaining_time_total < 60:
+                        remaining_str = f"{remaining_time_total:.1f}초"
+                    elif remaining_time_total < 3600:
+                        minutes = int(remaining_time_total // 60)
+                        seconds = int(remaining_time_total % 60)
+                        remaining_str = f"{minutes}분 {seconds}초"
+                    else:
+                        hours = int(remaining_time_total // 3600)
+                        minutes = int((remaining_time_total % 3600) // 60)
+                        remaining_str = f"{hours}시간 {minutes}분"
+
+                    status_placeholder.info(f"🤖 임베딩 생성 중... {i}/{total_texts} (배치 {current_batch_num}/{total_batches}) - 배치 예상: {batch_time_str}, 전체 남은 시간: {remaining_str}")
+                else:
+                    status_placeholder.info(f"🤖 임베딩 생성 중... {i}/{total_texts} (배치 {current_batch_num}/{total_batches})")
+
+                embedding_progress = (i / total_texts) * 0.5
+                progress_bar.progress(embedding_progress, text=f"임베딩 생성: {i}/{total_texts}")
+
+                # Process batch (시간이 걸리는 실제 작업)
+                batch_start_time = time.time()
+                batch_embeddings = embedding_model.encode(batch_texts)
+                embeddings.extend(batch_embeddings)
+                batch_end_time = time.time()
+
+                # Update after processing with remaining time
+                completed_texts = i + current_batch_size
+                batches_completed += 1
+                embedding_progress = (completed_texts / total_texts) * 0.5
+
+                # Calculate timing statistics
+                elapsed_time = time.time() - total_start_time
+                avg_time_per_batch = elapsed_time / batches_completed
+
+                if batches_completed < total_batches:
+                    remaining_batches = total_batches - batches_completed
+                    remaining_time = avg_time_per_batch * remaining_batches
+
+                    # Format time string
+                    if remaining_time < 60:
+                        time_str = f"{remaining_time:.1f}초"
+                    elif remaining_time < 3600:
+                        minutes = int(remaining_time // 60)
+                        seconds = int(remaining_time % 60)
+                        time_str = f"{minutes}분 {seconds}초"
+                    else:
+                        hours = int(remaining_time // 3600)
+                        minutes = int((remaining_time % 3600) // 60)
+                        time_str = f"{hours}시간 {minutes}분"
+
+                    status_text = f"🤖 임베딩 완료... {completed_texts}/{total_texts} ({embedding_progress*100:.1f}%) - 남은 시간: {time_str}"
+                    progress_text = f"임베딩: {completed_texts}/{total_texts} - 남은 시간: {time_str}"
+                else:
+                    status_text = f"🤖 임베딩 완료... {completed_texts}/{total_texts} ({embedding_progress*100:.1f}%)"
+                    progress_text = f"임베딩: {completed_texts}/{total_texts}"
+
+                status_placeholder.info(status_text)
+                progress_bar.progress(embedding_progress, text=progress_text)
+
+            status_placeholder.success("✅ 임베딩 생성 완료, 업서트 시작...")
+
+            # Process in batches with progress updates
+            upsert_start_time = time.time()
+            def progress_callback(processed, total, elapsed):
+                upsert_progress = 0.5 + (processed / total) * 0.5  # 50-100%
+
+                # Calculate remaining time for upsert
+                upsert_elapsed = time.time() - upsert_start_time
+                if processed > 0:
+                    avg_time_per_item = upsert_elapsed / processed
+                    remaining_items = total - processed
+                    remaining_time = avg_time_per_item * remaining_items
+
+                    # Format time string
+                    if remaining_time < 60:
+                        time_str = f"{remaining_time:.1f}초"
+                    elif remaining_time < 3600:
+                        minutes = int(remaining_time // 60)
+                        seconds = int(remaining_time % 60)
+                        time_str = f"{minutes}분 {seconds}초"
+                    else:
+                        hours = int(remaining_time // 3600)
+                        minutes = int((remaining_time % 3600) // 60)
+                        time_str = f"{hours}시간 {minutes}분"
+
+                    status_text = f"⚡ 업서트 진행 중... {processed}/{total} ({upsert_progress*100:.1f}%) - 남은 시간: {time_str}"
+                    progress_text = f"업서트: {processed}/{total} - 남은 시간: {time_str}"
+                else:
+                    status_text = f"⚡ 업서트 진행 중... {processed}/{total} ({upsert_progress*100:.1f}%)"
+                    progress_text = f"업서트: {processed}/{total}"
+
+                status_placeholder.info(status_text)
+                progress_bar.progress(upsert_progress, text=progress_text)
+
+            import numpy as np
+            embeddings_array = np.array(embeddings)
+            processed_count, batch_elapsed_time = batch_processor.process_batches(
+                collection_name=collection,
+                documents=documents,
+                embeddings=embeddings_array,
+                progress_callback=progress_callback
             )
 
-            if target_collection:
-                if st.button(f"🗑️ 삭제", key="delete_collection_btn"):
-                    if target_collection in collection_names:
-                        st.session_state.pending_delete = target_collection
-                        st.rerun()
-                    else:
-                        st.error(f"{target_collection}은(는) 존재하지 않는 컬렉션입니다.")
+            # 전체 소요 시간 계산 (임베딩 + 업서트)
+            total_elapsed_time = time.time() - total_start_time
 
-        # 삭제 확인 다이얼로그
-        if "pending_delete" in st.session_state:
-            delete_name = st.session_state.pending_delete
-            st.error(f"⚠️ **{delete_name}** 컬렉션을 삭제하시겠습니까?")
-            col_yes, col_no = st.columns(2)
-            with col_yes:
-                if st.button(f"확인 - 삭제"):
-                    try:
-                        temp_qc.delete_collection(delete_name)
-                        st.success(f"{delete_name} 삭제됨")
-                        if st.session_state.collection == delete_name:
-                            st.session_state.collection = "my_collection"
-                        del st.session_state.pending_delete
-                        st.rerun()
-                    except Exception as e:
-                        st.error(f"삭제 실패: {e}")
-            with col_no:
-                if st.button("취소"):
-                    del st.session_state.pending_delete
-                    st.rerun()
-    else:
-        st.info("컬렉션이 없습니다.")
+            # Complete
+            progress_bar.progress(1.0, text="완료!")
+            status_placeholder.success(f"🎉 완료! 총 {processed_count} 건, 소요 {total_elapsed_time:.3f}s")
 
-except Exception as e:
-    st.error(f"Qdrant 연결 실패: {e}")
-    st.write("위의 Qdrant 호스트와 포트 설정을 확인하세요.")
+        except Exception as e:
+            st.error(f"처리 중 오류 발생: {e}")
+
+    def get_database_service(self):
+        """Get or create database service"""
+        db_uri = self.settings.get('db_uri')
+        if self.database_service is None or getattr(self.database_service, 'connection_uri', None) != db_uri:
+            self.database_service = DatabaseServiceFactory.create_service(db_uri)
+        return self.database_service
+
+    def get_qdrant_service(self):
+        """Get or create Qdrant service"""
+        q_host = self.settings.get('q_host')
+        q_port = self.settings.get('q_port')
+
+        if (self.qdrant_service is None or
+                getattr(self.qdrant_service, 'host', None) != q_host or
+                getattr(self.qdrant_service, 'port', None) != q_port):
+            self.qdrant_service = QdrantServiceFactory.create_service(q_host, q_port)
+
+        return self.qdrant_service
+
+    def render_collection_management(self):
+        """Render collection management section"""
+        try:
+            qdrant_service = self.get_qdrant_service()
+            CollectionManagerComponent.render(qdrant_service)
+        except Exception as e:
+            st.error(f"컬렉션 관리 오류: {e}")
+
+    def run(self):
+        """Run the complete application"""
+        self.render_sidebar()
+        self.render_main_content()
+        self.render_collection_management()
+
+
+def main():
+    """Main application entry point"""
+    app = EmbeddingApp()
+    app.run()
+
+
+if __name__ == "__main__":
+    main()

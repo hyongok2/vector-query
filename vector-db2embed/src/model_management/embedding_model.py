@@ -79,7 +79,7 @@ class SentenceTransformerModel(EmbeddingModelInterface):
 class ModelConfig:
     """Model configuration management"""
 
-    def __init__(self, config_path: str = "models_config.yaml"):
+    def __init__(self, config_path: str = "config/models_config.yaml"):
         self.config_path = config_path
         self._config = self._load_config()
 
