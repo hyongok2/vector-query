@@ -61,6 +61,10 @@ class SentenceTransformerModel(EmbeddingModelInterface):
 
     def encode(self, texts: List[str]) -> np.ndarray:
         """Encode texts to normalized embeddings"""
+        # Add E5 prefix for E5 models (for document embedding)
+        if 'e5' in self.model_name.lower():
+            texts = [f"passage: {text}" for text in texts]
+
         embeddings = self._model.encode(texts, convert_to_numpy=True, show_progress_bar=False)
         return self._l2_normalize(embeddings)
 
