@@ -247,9 +247,17 @@ class EmbeddingApp:
             # 전체 시간 측정 시작
             total_start_time = time.time()
 
-            # Create progress bar directly
-            progress_bar = st.progress(0, text="시작 중...")
-            status_text = st.empty()
+            # Create two separate progress bars
+            col1, col2 = st.columns(2)
+            with col1:
+                st.write("🤖 **임베딩 생성**")
+                embedding_progress_bar = st.progress(0, text="준비 중...")
+                embedding_status = st.empty()
+
+            with col2:
+                st.write("📤 **Qdrant 업서트**")
+                upsert_progress_bar = st.progress(0, text="대기 중...")
+                upsert_status = st.empty()
 
             # Prepare batch processor
             batch_size = self.settings.get('batch_size', 64)
@@ -260,10 +268,8 @@ class EmbeddingApp:
             embeddings = []
             total_texts = len(texts)
 
-            # Create status placeholder
-            status_placeholder = st.empty()
-
             # Variables for time estimation
+            embedding_start_time = time.time()
             avg_time_per_batch = None
             batches_completed = 0
             total_batches = (total_texts + batch_size - 1) // batch_size
@@ -273,37 +279,9 @@ class EmbeddingApp:
                 current_batch_size = len(batch_texts)
                 current_batch_num = batches_completed + 1
 
-                # Show status before processing current batch
-                if avg_time_per_batch and batches_completed > 0:
-                    # 현재 배치 처리 예상 시간
-                    estimated_batch_time = avg_time_per_batch
-                    remaining_batches = total_batches - current_batch_num
-                    remaining_time_total = avg_time_per_batch * remaining_batches
-
-                    if estimated_batch_time < 60:
-                        batch_time_str = f"{estimated_batch_time:.1f}초"
-                    else:
-                        minutes = int(estimated_batch_time // 60)
-                        seconds = int(estimated_batch_time % 60)
-                        batch_time_str = f"{minutes}분 {seconds}초"
-
-                    if remaining_time_total < 60:
-                        remaining_str = f"{remaining_time_total:.1f}초"
-                    elif remaining_time_total < 3600:
-                        minutes = int(remaining_time_total // 60)
-                        seconds = int(remaining_time_total % 60)
-                        remaining_str = f"{minutes}분 {seconds}초"
-                    else:
-                        hours = int(remaining_time_total // 3600)
-                        minutes = int((remaining_time_total % 3600) // 60)
-                        remaining_str = f"{hours}시간 {minutes}분"
-
-                    status_placeholder.info(f"🤖 임베딩 생성 중... {i}/{total_texts} (배치 {current_batch_num}/{total_batches}) - 배치 예상: {batch_time_str}, 전체 남은 시간: {remaining_str}")
-                else:
-                    status_placeholder.info(f"🤖 임베딩 생성 중... {i}/{total_texts} (배치 {current_batch_num}/{total_batches})")
-
-                embedding_progress = (i / total_texts) * 0.5
-                progress_bar.progress(embedding_progress, text=f"임베딩 생성: {i}/{total_texts}")
+                # Update embedding progress before processing
+                embedding_progress = i / total_texts
+                embedding_progress_bar.progress(embedding_progress, text=f"배치 {current_batch_num}/{total_batches}")
 
                 # Process batch (시간이 걸리는 실제 작업)
                 batch_start_time = time.time()
@@ -314,10 +292,10 @@ class EmbeddingApp:
                 # Update after processing with remaining time
                 completed_texts = i + current_batch_size
                 batches_completed += 1
-                embedding_progress = (completed_texts / total_texts) * 0.5
+                embedding_progress = completed_texts / total_texts
 
                 # Calculate timing statistics
-                elapsed_time = time.time() - total_start_time
+                elapsed_time = time.time() - embedding_start_time
                 avg_time_per_batch = elapsed_time / batches_completed
 
                 if batches_completed < total_batches:
@@ -336,21 +314,23 @@ class EmbeddingApp:
                         minutes = int((remaining_time % 3600) // 60)
                         time_str = f"{hours}시간 {minutes}분"
 
-                    status_text = f"🤖 임베딩 완료... {completed_texts}/{total_texts} ({embedding_progress*100:.1f}%) - 남은 시간: {time_str}"
-                    progress_text = f"임베딩: {completed_texts}/{total_texts} - 남은 시간: {time_str}"
+                    progress_text = f"{completed_texts}/{total_texts} - 남은 시간: {time_str}"
+                    status_text = f"처리중: {completed_texts}/{total_texts} 텍스트 (남은 시간: {time_str})"
                 else:
-                    status_text = f"🤖 임베딩 완료... {completed_texts}/{total_texts} ({embedding_progress*100:.1f}%)"
-                    progress_text = f"임베딩: {completed_texts}/{total_texts}"
+                    progress_text = f"{completed_texts}/{total_texts} - 완료"
+                    status_text = f"처리중: {completed_texts}/{total_texts} 텍스트"
 
-                status_placeholder.info(status_text)
-                progress_bar.progress(embedding_progress, text=progress_text)
+                embedding_progress_bar.progress(embedding_progress, text=progress_text)
+                embedding_status.info(status_text)
 
-            status_placeholder.success("✅ 임베딩 생성 완료, 업서트 시작...")
+            # Mark embedding as complete
+            embedding_progress_bar.progress(1.0, text="완료!")
+            embedding_status.success(f"✅ 임베딩 생성 완료: {total_texts}개 텍스트")
 
             # Process in batches with progress updates
             upsert_start_time = time.time()
             def progress_callback(processed, total, elapsed):
-                upsert_progress = 0.5 + (processed / total) * 0.5  # 50-100%
+                upsert_progress = processed / total  # 0-100%
 
                 # Calculate remaining time for upsert
                 upsert_elapsed = time.time() - upsert_start_time
@@ -371,14 +351,14 @@ class EmbeddingApp:
                         minutes = int((remaining_time % 3600) // 60)
                         time_str = f"{hours}시간 {minutes}분"
 
-                    status_text = f"⚡ 업서트 진행 중... {processed}/{total} ({upsert_progress*100:.1f}%) - 남은 시간: {time_str}"
-                    progress_text = f"업서트: {processed}/{total} - 남은 시간: {time_str}"
+                    progress_text = f"{processed}/{total} - 남은 시간: {time_str}"
+                    status_text = f"처리중: {processed}/{total} 벡터 (남은 시간: {time_str})"
                 else:
-                    status_text = f"⚡ 업서트 진행 중... {processed}/{total} ({upsert_progress*100:.1f}%)"
-                    progress_text = f"업서트: {processed}/{total}"
+                    progress_text = f"{processed}/{total}"
+                    status_text = f"시작: {processed}/{total} 벡터"
 
-                status_placeholder.info(status_text)
-                progress_bar.progress(upsert_progress, text=progress_text)
+                upsert_progress_bar.progress(upsert_progress, text=progress_text)
+                upsert_status.info(status_text)
 
             import numpy as np
             embeddings_array = np.array(embeddings)
@@ -391,10 +371,22 @@ class EmbeddingApp:
 
             # 전체 소요 시간 계산 (임베딩 + 업서트)
             total_elapsed_time = time.time() - total_start_time
+            embedding_time = upsert_start_time - embedding_start_time
+            upsert_time = time.time() - upsert_start_time
 
-            # Complete
-            progress_bar.progress(1.0, text="완료!")
-            status_placeholder.success(f"🎉 완료! 총 {processed_count} 건, 소요 {total_elapsed_time:.3f}s")
+            # Mark upsert as complete
+            upsert_progress_bar.progress(1.0, text="완료!")
+            upsert_status.success(f"✅ Qdrant 업서트 완료: {processed_count}개 벡터")
+
+            # Show final summary
+            st.success(f"🎉 전체 작업 완료! 총 {processed_count}건 처리")
+            col1, col2, col3 = st.columns(3)
+            with col1:
+                st.metric("임베딩 시간", f"{embedding_time:.1f}초")
+            with col2:
+                st.metric("업서트 시간", f"{upsert_time:.1f}초")
+            with col3:
+                st.metric("전체 시간", f"{total_elapsed_time:.1f}초")
 
         except Exception as e:
             st.error(f"처리 중 오류 발생: {e}")
