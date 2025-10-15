@@ -168,9 +168,13 @@ class VectorProcessor:
         row_index: int,
         text: str,
         vector: np.ndarray,
-        source_row: Dict[str, Any]
+        source_row: Any  # Can be Dict or JSON string
     ) -> PointStruct:
-        """Create PointStruct for Qdrant"""
+        """Create PointStruct for Qdrant
+
+        Args:
+            source_row: Source row data. Can be a dict or JSON string for type safety.
+        """
         point_id = VectorProcessor.create_point_id(pk_value, chunk_index)
 
         return PointStruct(
@@ -218,7 +222,7 @@ class BatchProcessor:
                     row_index=doc["row_index"],
                     text=doc["text"],
                     vector=embedding,
-                    source_row=doc.get("source_row", {})
+                    source_row=doc.get("source_row", "{}")  # JSON string, default to empty JSON
                 )
                 points.append(point)
 

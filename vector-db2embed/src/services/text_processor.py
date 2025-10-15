@@ -1,5 +1,6 @@
 """Text processing and chunking service"""
 import re
+import json
 from typing import List, Dict, Any, Optional, Tuple
 from abc import ABC, abstractmethod
 from jinja2 import Template, TemplateError
@@ -145,12 +146,16 @@ class TextProcessor(TextProcessorInterface):
 
                 # Create document for each chunk
                 for chunk_index, chunk in enumerate(chunks):
+                    # Convert source_row to JSON string for type safety
+                    # This prevents numpy/pandas type serialization issues with Qdrant
+                    source_row_json = json.dumps(row_dict, default=str, ensure_ascii=False)
+
                     documents.append({
                         "text": chunk,
                         "pk": pk_value,
                         "chunk_index": chunk_index,
                         "row_index": int(row_index),
-                        "source_row": row_dict
+                        "source_row": source_row_json
                     })
 
             except Exception as e:

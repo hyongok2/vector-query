@@ -4,7 +4,7 @@ services:
     build:
       context: ..
       dockerfile: docker/Dockerfile
-    image: vector-db-embeddings:v1.0.3
+    image: vector-db-embeddings:v1.0.4
     container_name: vector-db-embeddings
     ports:
       - "5260:8501"
