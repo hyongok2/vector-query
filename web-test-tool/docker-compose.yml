@@ -3,7 +3,7 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
-    image: vector-search-tester:v1.0.0
+    image: vector-search-tester:v1.0.1
     container_name: vector-search-tester
     ports:
       - "5250:80"

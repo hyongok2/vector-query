@@ -92,6 +92,10 @@ function App() {
     const saved = localStorage.getItem('lastWithPayload')
     return saved ? saved === 'true' : true
   })
+  const [filterJson, setFilterJson] = useState<string>(() => {
+    return localStorage.getItem('lastFilterJson') || ''
+  })
+  const [filterError, setFilterError] = useState<string>('')
 
   // Search state
   const [searchState, setSearchState] = useState<SearchState>({
@@ -208,6 +212,19 @@ function App() {
     document.title = 'Vector Search Tester'
   }, [loadModels, checkConnection])
 
+  // JSON 필터 유효성 검증
+  const validateFilter = useCallback((jsonString: string): { valid: boolean; parsed?: any; error?: string } => {
+    if (!jsonString.trim()) {
+      return { valid: true, parsed: null }
+    }
+    try {
+      const parsed = JSON.parse(jsonString)
+      return { valid: true, parsed }
+    } catch (err) {
+      return { valid: false, error: err instanceof Error ? err.message : 'Invalid JSON' }
+    }
+  }, [])
+
   // 성공한 설정 정보를 로컬 스토리지에 저장
   const saveSuccessfulSettings = useCallback(() => {
     localStorage.setItem('lastApiServerUrl', apiServerUrl)
@@ -217,7 +234,8 @@ function App() {
     localStorage.setItem('lastTopK', topK.toString())
     localStorage.setItem('lastThreshold', threshold.toString())
     localStorage.setItem('lastWithPayload', withPayload.toString())
-  }, [apiServerUrl, qdrantUrl, collection, selectedModel, topK, threshold, withPayload])
+    localStorage.setItem('lastFilterJson', filterJson.trim())
+  }, [apiServerUrl, qdrantUrl, collection, selectedModel, topK, threshold, withPayload, filterJson])
 
   const handleSearch = useCallback(async () => {
     if (!text.trim() || !collection.trim()) {
@@ -235,6 +253,18 @@ function App() {
       }))
       return
     }
+
+    // 필터 유효성 검증
+    const filterValidation = validateFilter(filterJson)
+    if (!filterValidation.valid) {
+      setFilterError(filterValidation.error || 'Invalid JSON')
+      setSearchState(prev => ({
+        ...prev,
+        error: `필터 JSON 오류: ${filterValidation.error}`
+      }))
+      return
+    }
+    setFilterError('')
 
     setSearchState(prev => ({
       ...prev,
@@ -256,6 +286,7 @@ function App() {
         qdrant: {
           url: qdrantUrl,
           collection: collection.trim(),
+          query_filter: filterValidation.parsed || undefined
         }
       }
 
@@ -287,7 +318,7 @@ function App() {
       // Update title on error
       document.title = 'Vector Search Tester - Error'
     }
-  }, [text, collection, selectedModel, topK, threshold, withPayload, qdrantUrl, apiServerUrl, saveSuccessfulSettings])
+  }, [text, collection, selectedModel, topK, threshold, withPayload, qdrantUrl, apiServerUrl, filterJson, validateFilter, saveSuccessfulSettings])
 
   const toggleDarkMode = useCallback(() => {
     setUISettings(prev => {
@@ -313,6 +344,51 @@ function App() {
 
   const toggleAdvanced = useCallback(() => {
     setUISettings(prev => ({ ...prev, showAdvanced: !prev.showAdvanced }))
+  }, [])
+
+  // Filter presets
+  const filterPresets = {
+    category: {
+      name: '카테고리 필터',
+      json: JSON.stringify({
+        "must": [
+          { "key": "category", "match": { "value": "기술" } }
+        ]
+      }, null, 2)
+    },
+    dateRange: {
+      name: '날짜 범위',
+      json: JSON.stringify({
+        "must": [
+          { "key": "created_at", "range": { "gte": "2024-01-01T00:00:00Z" } }
+        ]
+      }, null, 2)
+    },
+    multiCondition: {
+      name: '복합 조건',
+      json: JSON.stringify({
+        "must": [
+          { "key": "category", "match": { "value": "AI" } },
+          { "key": "year", "range": { "gte": 2024 } }
+        ],
+        "must_not": [
+          { "key": "status", "match": { "value": "draft" } }
+        ]
+      }, null, 2)
+    },
+    tags: {
+      name: '태그 필터',
+      json: JSON.stringify({
+        "must": [
+          { "key": "tags", "match": { "any": ["AI", "머신러닝", "딥러닝"] } }
+        ]
+      }, null, 2)
+    }
+  }
+
+  const applyFilterPreset = useCallback((presetJson: string) => {
+    setFilterJson(presetJson)
+    setFilterError('')
   }, [])
 
   // Copy text to clipboard
@@ -585,6 +661,95 @@ function App() {
                       />
                       <span className="checkbox-text">Include metadata in results</span>
                     </label>
+                  </div>
+
+                  {/* Qdrant Filter */}
+                  <div className="form-group">
+                    <label htmlFor="filter-json" className="label">
+                      🔍 Qdrant Filter (JSON)
+                    </label>
+
+                    {/* Filter Presets */}
+                    <div style={{ display: 'flex', gap: '8px', marginBottom: '8px', flexWrap: 'wrap' }}>
+                      <button
+                        type="button"
+                        className="button button-secondary"
+                        style={{ fontSize: '12px', padding: '4px 8px' }}
+                        onClick={() => applyFilterPreset(filterPresets.category.json)}
+                        title="카테고리 필터 예시 적용"
+                      >
+                        📁 {filterPresets.category.name}
+                      </button>
+                      <button
+                        type="button"
+                        className="button button-secondary"
+                        style={{ fontSize: '12px', padding: '4px 8px' }}
+                        onClick={() => applyFilterPreset(filterPresets.dateRange.json)}
+                        title="날짜 범위 필터 예시 적용"
+                      >
+                        📅 {filterPresets.dateRange.name}
+                      </button>
+                      <button
+                        type="button"
+                        className="button button-secondary"
+                        style={{ fontSize: '12px', padding: '4px 8px' }}
+                        onClick={() => applyFilterPreset(filterPresets.multiCondition.json)}
+                        title="복합 조건 필터 예시 적용"
+                      >
+                        🎯 {filterPresets.multiCondition.name}
+                      </button>
+                      <button
+                        type="button"
+                        className="button button-secondary"
+                        style={{ fontSize: '12px', padding: '4px 8px' }}
+                        onClick={() => applyFilterPreset(filterPresets.tags.json)}
+                        title="태그 필터 예시 적용"
+                      >
+                        🏷️ {filterPresets.tags.name}
+                      </button>
+                      <button
+                        type="button"
+                        className="button button-secondary"
+                        style={{ fontSize: '12px', padding: '4px 8px' }}
+                        onClick={() => {
+                          setFilterJson('')
+                          setFilterError('')
+                        }}
+                        title="필터 초기화"
+                      >
+                        🗑️ 초기화
+                      </button>
+                    </div>
+
+                    <textarea
+                      id="filter-json"
+                      className={`input textarea ${filterError ? 'error' : ''}`}
+                      value={filterJson}
+                      onChange={(e) => {
+                        setFilterJson(e.target.value)
+                        setFilterError('')
+                      }}
+                      placeholder='예시: {"must": [{"key": "category", "match": {"value": "기술"}}]}'
+                      rows={6}
+                      style={{
+                        fontFamily: 'monospace',
+                        fontSize: '13px',
+                        borderColor: filterError ? 'var(--color-error)' : undefined
+                      }}
+                    />
+                    {filterError && (
+                      <small style={{ color: 'var(--color-error)', fontSize: '12px', marginTop: '4px', display: 'block' }}>
+                        ❌ {filterError}
+                      </small>
+                    )}
+                    {!filterError && filterJson.trim() && (
+                      <small style={{ color: 'var(--color-success)', fontSize: '12px', marginTop: '4px', display: 'block' }}>
+                        ✓ Valid JSON
+                      </small>
+                    )}
+                    <small style={{ color: 'var(--color-text-secondary)', fontSize: '12px', marginTop: '4px', display: 'block' }}>
+                      비워두면 필터 없이 검색합니다. <a href="https://github.com/yourusername/vector/blob/main/docs/QDRANT_FILTERING_GUIDE.md" target="_blank" rel="noopener noreferrer" style={{ color: 'var(--color-primary)' }}>필터 가이드 보기</a>
+                    </small>
                   </div>
                 </div>
               )}
